@@ -1,0 +1,4 @@
+# Scenario-specific overrides for scenario_head_on.yaml
+# Codex: implement concrete scenario parameters during Phase 7/8.
+scenario:
+  name: head_on

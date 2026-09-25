@@ -1,0 +1,75 @@
+simulation:
+  dt: 0.05
+  max_time: 60.0
+  goal_tolerance: 0.50
+  goal_speed_tolerance: 0.50
+  seed: 42
+
+prediction:
+  horizon: 3.0
+  dt: 0.10
+
+uav:
+  radius: 0.30
+  max_speed: 5.0
+  max_acceleration: 4.0
+  desired_speed: 2.0
+  force_to_acceleration_gain: 1.0
+  use_uncertainty: false
+  initial_position_covariance: 0.0
+
+kalman:
+  acceleration_noise_spectral_density: 0.25
+  measurement_position_std: 0.10
+  initial_position_std: 0.20
+  initial_velocity_std: 0.50
+
+chance_constraint:
+  collision_probability: 0.01
+  extra_safety_margin: 0.50
+
+attractive:
+  gain: 1.0
+  switch_distance: 5.0
+
+repulsive:
+  eta_0: 2.0
+  length_scale: 1.5
+  risk_gain: 2.0
+  future_decay: 0.7
+  max_obstacle_force: 15.0
+  max_total_repulsive_force: 20.0
+  exponent_clip_min: -50.0
+  exponent_clip_max: 50.0
+
+risk:
+  cpa_weight: 0.5
+  ttc_weight: 0.5
+  cpa_warning_margin: 1.5
+  cpa_sigmoid_scale: 0.5
+  ttc_time_scale: 2.0
+
+damping:
+  gain: 0.4
+
+control:
+  max_total_force: 30.0
+
+numerical:
+  eps_distance: 1.0e-8
+  eps_velocity_squared: 1.0e-12
+  eps_sigma: 1.0e-10
+  psd_tolerance: 1.0e-10
+
+traditional_apf:
+  repulsive_gain: 2.0
+  influence_clearance: 4.0
+  min_clearance: 1.0e-4
+
+ablation:
+  use_uncertainty: true
+  use_cpa_risk: true
+  use_ttc_risk: true
+  use_predictive_horizon: true
+  use_damping: true
+  use_uav_uncertainty: false
