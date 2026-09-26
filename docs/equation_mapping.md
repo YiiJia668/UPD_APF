@@ -50,3 +50,28 @@
 `margin_gradient` is the gradient of the chance-constrained margin.
 
 It is **not** the gradient of the composite CPA/TTC risk. Do not rename or expose it as `risk_gradient`.
+
+## Phase 5 public API
+
+- `attractive.potential(position, goal, gain, switch_distance)` returns a Python
+  float; `attractive.force(...)` returns a (3,) ndarray.
+- `repulsive.temporal_weights(times, future_decay)` accepts a nonempty (M,)
+  time array, normally supplied by `prediction_time_grid`.
+- `repulsive.risk_modulated_gain(risk, eta_0, risk_gain)` returns the frozen gain.
+- `repulsive.potential(margins, times, risk, config=RepulsiveConfig())` returns
+  the scalar predictive potential with configured numerical exponent clipping.
+- `repulsive.obstacle_force(margins, margin_gradients, times, risk, config,
+  saturate=True)` consumes (M,), (M, 3), and (M,) arrays. The optional config
+  defaults to `RepulsiveConfig()`; `saturate` is keyword-only. Use
+  `saturate=False` for raw-force finite-difference checks. The leading
+  coefficient is positive because the supplied gradient is with respect to UAV
+  position. Only the per-obstacle limit is used.
+- `damping.reference_velocity(position, goal, desired_speed, eps_distance=...)`
+  accepts (3,) positions and returns (3,) velocity; the numerical threshold is
+  keyword-only and defaults to `NumericalConfig().eps_distance`.
+- `damping.force(velocity, reference_velocity, gain)` returns (3,) damping.
+
+Risk and weights are held fixed during a cycle's local field evaluation.
+Clipping and active force saturation invalidate the original exact gradient
+identity. Traditional repulsion and total-command equations in the table remain
+future-phase mappings, not implemented Phase-5 features.
