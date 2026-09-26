@@ -1,5 +1,26 @@
 # UPD-APF Project Specification
 
+> Phase 7 dynamics contract: the minimal simulation uses
+> `a = force_to_acceleration_gain * F_total`, with a finite, strictly positive gain.
+> Zero-order-held acceleration is integrated analytically:
+> `p_next = p + v*dt + 0.5*a*dt^2` and `v_next = v + a*dt`.
+> There is no independently configurable mass, second acceleration saturation,
+> or velocity clamp. This dynamics contract supersedes only the older scaffold's
+> UAV integration/saturation assumptions. Obstacle truth remains deterministic CV.
+>
+> Phase 7 physical collision detection is intentionally sampled at simulation
+> cycle boundaries, using ground-truth positions and physical radii:
+> `distance <= r_uav + r_obstacle`, without the planner safety buffer.
+> It can miss a collision that occurs entirely within one integration interval.
+> Continuous/swept within-step collision detection remains an explicit future
+> enhancement/requirement for full simulation or benchmark work; it is not
+> implemented in Phase 7.
+>
+> See [Phase 7 mapping](equation_mapping.md#phase-7-closed-loop-mapping-authoritative-for-minimal-simulation).
+> Existing timing, truth/measurement/estimate separation, termination priority,
+> goal condition, and Phase 1--6 prediction, chance-safety, risk and potential
+> equations are unchanged.
+
 ## Objective
 
 Implement a modular, testable, reproducible Python research codebase for 3D UAV local path planning with dynamic uncertain obstacles.
@@ -49,7 +70,12 @@ Avoid large frameworks in the first implementation.
 
 ## UAV model
 
-Use a 3D point-mass approximation.
+Use a 3D point-mass approximation. The existing public configuration
+`force_to_acceleration_gain` is k_F, finite and strictly positive. It represents
+inverse effective mass, k_F=1/m_eff; there is no independently configurable mass.
+Phase 7 uses the mapping below with exact held-acceleration integration; the
+following saturation/semi-implicit equations remain older scaffold aspirations,
+not active Phase-7 behavior (see the authoritative mapping linked above).
 
 \[
 a_{\rm raw}=k_FF_{\rm cmd}

@@ -175,6 +175,16 @@ def load_config(path: str | Path) -> UPDAPFConfig:
 
 
 def validate_config(config: UPDAPFConfig) -> None:
+    for name, value, positive in (
+        ("uav.force_to_acceleration_gain", config.uav.force_to_acceleration_gain, True),
+        ("uav.radius", config.uav.radius, False),
+        ("simulation.dt", config.simulation.dt, True),
+        ("simulation.max_time", config.simulation.max_time, True),
+        ("simulation.goal_tolerance", config.simulation.goal_tolerance, True),
+        ("simulation.goal_speed_tolerance", config.simulation.goal_speed_tolerance, False),
+    ):
+        if not isfinite(value) or value < 0 or (positive and value == 0):
+            raise ValueError(f"{name} must be finite and {'positive' if positive else 'non-negative'}")
     if not isfinite(config.control.max_total_force) or config.control.max_total_force < 0:
         raise ValueError("control.max_total_force must be finite and non-negative")
     positive = {

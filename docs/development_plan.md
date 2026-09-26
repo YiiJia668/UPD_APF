@@ -105,6 +105,16 @@ Requirements:
 
 ## Phase 7 — Minimal simulation
 
+The explicit Phase-7 implementation request narrows the older list below:
+implement only no-obstacle and one single-crossing setup, deterministic CV truth,
+position sensor, estimator scheduling, exact gain-scaled force point-mass integration,
+sampled physical collision, position-and-speed goal termination, and independent
+structured traces. Static/near-head-on and the full scenario library are deferred.
+This single-crossing integration fixture does not start Phase 8. No benchmark,
+CSV logger, visualization or Traditional APF comparison is implemented.
+
+Original broader planning list (not the Phase-7 acceptance scope):
+
 Implement:
 - point-mass UAV;
 - dynamic obstacle truth model;

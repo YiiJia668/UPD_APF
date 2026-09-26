@@ -39,8 +39,8 @@
 | PSD validation | eigenvalue tolerance | `utils/covariance.py::validate_psd` |
 | Time grid | includes 0 and horizon | `utils/time_grid.py::prediction_time_grid` |
 | Total UPD-APF command | attraction + repulsion + damping | `planner/upd_apf_planner.py::UPDAPFPlanner.compute_control` |
-| Point-mass acceleration | `sat(kF*Fcmd, amax)` | `simulation/uav_model.py::command_acceleration` |
-| UAV integration | point-mass step | `simulation/uav_model.py::step` |
+| Point-mass acceleration | `a = force_to_acceleration_gain * F_total` (Phase 7; no secondary saturation) | `simulation/uav_model.py::PointMassUAVModel.step` |
+| UAV integration | `p_next=p+v*dt+0.5*a*dt^2`, `v_next=v+a*dt` | `simulation/uav_model.py::PointMassUAVModel.step` |
 | Path length | sum segment lengths | `evaluation/metrics.py::path_length` |
 | Integrated risk | sum `R*dt` | `evaluation/metrics.py::integrated_risk` |
 | Smoothness cost | sum acceleration differences squared | `evaluation/metrics.py::acceleration_difference_cost` |
@@ -115,3 +115,41 @@ sufficient chance condition. CPA is nominal mean-distance CPA and probabilistic_
 is sampled/interpolated chance-boundary TTC. Degenerate errors propagate.
 Perfectly symmetric head-on geometry has no manufactured lateral escape.
 Phase 6 performs no state or motion integration.
+
+
+## Phase 7 closed-loop mapping (authoritative for minimal simulation)
+
+The explicit Phase-7 request supersedes the old scaffold's semi-implicit
+integration and speed/acceleration clamps. Phase 1--6 mathematics is unchanged.
+
+| Quantity | Formula / owner |
+|---|---|
+| Physical acceleration | `a = force_to_acceleration_gain * F_total`, gain finite and positive; `PointMassUAVModel.step` |
+| UAV truth integration | Constant held acceleration: `p+v*dt+0.5*a*dt^2`, `v+a*dt` |
+| UAV covariance | Copy the input position covariance; no new covariance dynamics |
+| Obstacle truth | `p_next=p+v*dt`, unchanged velocity; `ConstantVelocityObstacle.advance` |
+| Measurement | `z=p_true+nu`, `nu~N(0,R_sensor)`; `PositionSensor.measure` |
+| Measurement reproducibility | Explicit Generator or seed for nonzero covariance; exact copy for zero covariance |
+| Estimator initialization | Initial belief/prior at t=0, before the first t=0 measurement update |
+| Posterior scheduling | At k=0 measure/update/plan without prediction; at k>0 predict(previous actual dt), then measure/update/plan |
+| Planner binding | Public metadata plus estimator, never truth position/velocity |
+| Physical collision | `norm(p_u-p_o_true) <= r_u+r_o`; `Simulator._termination` |
+| Goal arrival | Position distance <= goal_tolerance AND speed <= goal_speed_tolerance |
+| Termination priority | Collision, then goal_reached, then max_time; before measurements |
+| Final step | End boundary `min(max_time,(k+1)*simulation.dt)`, dt=boundary-current time |
+| Prediction grid | Existing prediction.dt/horizon remains independent of simulation.dt |
+
+The boundary-index clock is mathematically equivalent to a final partial step
+and avoids accumulation of floating-point clock error. Physical collision is
+sampled at cycle boundaries, including the final state. No swept detection is
+implemented. Safety-buffer overlap or chance-boundary violation alone never
+terminates a run. The final estimator can lag terminal truth by the final dt;
+there is no terminal measurement/planner cycle.
+
+Legacy UAVConfig.max_speed and max_acceleration remain compatible configuration
+fields but are not applied by Phase 7. The existing force_to_acceleration_gain
+(default 1.0) is the single force-to-acceleration source, interpreted as inverse
+effective mass (gain=1/m_eff); no independent mass parameter is exposed. Existing simulation
+goal tolerances are retained at 0.5 for both distance and speed. Scenario-only
+settings desired_speed=0 and damping.gain=2 demonstrate stable goal approach
+without changing the global planner defaults or adding goal slowdown logic.
