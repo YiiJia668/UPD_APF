@@ -2,13 +2,13 @@
 
 ## Status
 
-Phases 1 through 5 are complete. Phase 5 is implemented on
-`codex/upd-apf-phase5-potential-fields`; it has not been committed or merged.
+Phases 1 through 6 are implemented. Phase 6 is validated on
+`codex/upd-apf-phase6-planner`, based on `fb3e209` (`upd-apf-phase5`).
+Phase-6 changes remain uncommitted for human review.
 
 ## Current phase
 
-Phase 5 — COMPLETE
-Phase 6 has not started.
+Phase 6: complete, awaiting human review. Phase 7 has not started.
 
 ## Phase 1
 
@@ -127,7 +127,7 @@ and mathematical definitions are unchanged.
 
 ## Regression
 
-Full cumulative suite: 223 passed (85 existing + 138 Phase-5 tests).
+Full cumulative suite: 286 passed (223 existing + 63 Phase-6 tests).
 No failures, skips, xfails, or pytest warnings.
 
 ## Known limitations
@@ -140,4 +140,112 @@ No failures, skips, xfails, or pytest warnings.
 
 ## Next step
 
-Phase 6 — Planner, pending explicit approval.
+Human review of Phase 6. Phase 7 requires a separate explicit request.
+
+
+## Phase 6: planner integration
+
+Phase 6 does NOT add new avoidance mathematics. It integrates Phase 2
+prediction, Phase 3 chance safety, Phase 4 CPA/TTC/risk and Phase 5 potential
+forces, adding multi-obstacle aggregation, total-force saturation and structured
+diagnostics. No prediction, safety or potential source module was modified.
+No environment, simulation, visualization or Traditional APF work was added.
+No commit or push was performed.
+
+### Public API and compatibility
+
+```python
+UPDAPFPlanner(config: UPDAPFConfig)
+compute_control(self, uav_state: UAVState, goal: ArrayLike,
+                obstacles: Sequence[PlannerObstacle]) -> UPDAPFResult
+```
+
+`PlannerObstacle(metadata: ObstacleMetadata, predictor: Predictor)` is frozen,
+defined in interfaces.py and exported from upd_apf.planner alongside the planner.
+This avoids circular imports. The insufficient Sequence[Predictor] annotation
+in Planner now names Sequence[PlannerObstacle]. Bare predictors are rejected.
+Metadata requires a nonempty string id and finite nonnegative radius.
+No private estimator fields, fabricated ids or shared obstacle radius are used.
+
+ObstacleRiskResult appends repulsive_force_raw and repulsive_potential;
+its existing repulsive_force is individually saturated force.
+UPDAPFResult appends total_force_raw and reference_velocity.
+New fields default to None for old constructor compatibility; planner results
+always populate them. New vector fields are copied and read-only. There are no
+redundant sample arrays or new global potential fields.
+
+### Control cycle
+
+1. Validate state, goal, bindings, distributions and total-force limit. Existing
+   control.max_total_force must be finite and nonnegative; zero is allowed,
+   consistently with saturate_vector.
+2. Call prediction_time_grid(horizon, dt) once. All obstacles share it,
+   including zero and exact horizon (also for horizon=1 and dt=0.3).
+3. Call predict_uav_distribution at each time. UAV covariance follows
+   config.uav.use_uncertainty, with no new covariance dynamics. Obstacle queries
+   use predict_distribution only. Current obstacle velocity comes from the
+   zero-time GaussianPrediction.velocity_mean. Predictor absolute timestamps
+   are validated; SafetySample.time uses relative prediction offsets.
+4. Call collision_radius separately for each metadata radius and confidence_beta
+   once per cycle. Call relative_covariance and evaluate_safety_sample per pair.
+5. Call compute_cpa on current relative position/velocity. Query both predictors
+   at exact CPA time, including off-grid times, then call compute_cpa_margin.
+   CPA minimizes nominal mean distance, not chance margin.
+6. Pass samples to compute_chance_constraint_ttc. Phase 4 owns crossing and
+   interpolation. Call build_collision_risk once per obstacle with RiskConfig.
+7. Freeze total_risk and pass it unchanged to repulsive.potential and
+   repulsive.obstacle_force with saturate=False and saturate=True.
+8. Sum individually saturated forces, without an extra sign/risk multiplier
+   or intermediate total-repulsion saturation. max_total_repulsive_force is
+   intentionally unused under the authoritative two-stage Phase-6 contract.
+9. Obtain attraction, reference velocity and damping from Phase 5. Compose
+   total_force_raw = attractive_force + repulsive_force + damping_force, then
+   call saturate_vector(total_force_raw, config.control.max_total_force).
+10. Call aggregate_risk for maximum and arithmetic mean. Minimum margin covers
+    all samples; minimum TTC covers all obstacles. Diagnostics preserve input
+    order; aggregate outputs are permutation invariant within floating tolerance.
+
+Empty obstacles return empty diagnostics, zero repulsion/risks and infinite
+minimum margin/TTC; attraction, damping and final saturation still run.
+At goal, attraction/reference velocity vanish and damping brakes remaining
+velocity. Obstacle repulsion remains active.
+
+### Validation
+
+The prior planner test file was only a docstring placeholder. Added 63 tests
+cover binding/API and legacy constructors; empty/goal behavior; one common grid;
+direct Phase 2--5 numerical comparisons; exact off-grid CPA; chance-TTC;
+no double sign/risk weighting; addition/cancellation; two-stage saturation;
+summaries/accounting; permutation and translation invariance; proper-rotation
+covariance with anisotropic covariance and active saturation; uncertainty;
+real KF state/covariance/time purity; deterministic calls and result ownership;
+malformed inputs/predictions/limits; per-obstacle radii; frozen risk call counts;
+degenerate grid/CPA geometry and no lateral kick in symmetric head-on geometry.
+
+An initial new grid assertion compared 0.3*3 and literal 0.9 bitwise. It was
+corrected to compare exactly against the common grid API, keeping exact endpoint
+checks. No existing test or algorithm was changed to conceal a failure.
+
+Full pytest: 286 passed (223 existing + 63 new), no skips or xfails.
+python -m compileall -q src: passed. git diff --check: passed.
+
+### Interpretation, limitations and TODO
+
+- Risk is a dimensionless index, not calibrated collision probability.
+- c<0 violates a conservative sufficient condition; it does not establish that
+  true collision probability exceeds epsilon.
+- probabilistic_ttc is sampled/interpolated chance-boundary TTC, not exact
+  geometric TTC. Finite sampling can miss between-sample events.
+- Degenerate geometry errors propagate, including exact CPA coincidences.
+  No fallback direction or fabricated gradient is introduced.
+- Perfectly symmetric isotropic head-on geometry has no manufactured lateral
+  escape; stopping, reversing or equilibrium remain possible.
+- Frozen risk, damping, clipping and saturation do not make the command the
+  exact negative gradient of a global conservative potential.
+- Third-party predictors must honor the pure-query protocol. Real KF purity
+  is regression tested; arbitrary predictor implementations remain responsible
+  for their own query purity.
+- Ablation switches remain reserved for later benchmark work. This phase uses
+  the full-chain pseudocode and the existing config.uav.use_uncertainty option.
+- No Phase-6 implementation TODO remains. Motion integration and simulation
+  require later explicit authorization.

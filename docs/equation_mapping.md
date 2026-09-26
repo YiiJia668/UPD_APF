@@ -38,7 +38,7 @@
 | Covariance symmetrization | `(P+P.T)/2` | `utils/covariance.py::symmetrize` |
 | PSD validation | eigenvalue tolerance | `utils/covariance.py::validate_psd` |
 | Time grid | includes 0 and horizon | `utils/time_grid.py::prediction_time_grid` |
-| Total UPD-APF command | attraction + repulsion + damping | `planner/upd_apf_planner.py::compute_control` |
+| Total UPD-APF command | attraction + repulsion + damping | `planner/upd_apf_planner.py::UPDAPFPlanner.compute_control` |
 | Point-mass acceleration | `sat(kF*Fcmd, amax)` | `simulation/uav_model.py::command_acceleration` |
 | UAV integration | point-mass step | `simulation/uav_model.py::step` |
 | Path length | sum segment lengths | `evaluation/metrics.py::path_length` |
@@ -73,5 +73,45 @@ It is **not** the gradient of the composite CPA/TTC risk. Do not rename or expos
 
 Risk and weights are held fixed during a cycle's local field evaluation.
 Clipping and active force saturation invalidate the original exact gradient
-identity. Traditional repulsion and total-command equations in the table remain
-future-phase mappings, not implemented Phase-5 features.
+identity. At the Phase-5 boundary, traditional repulsion and total-command equations
+were future mappings. Phase 6 now implements total-command orchestration;
+traditional repulsion remains a future-phase mapping.
+
+
+## Phase 6 integration mapping
+
+Phase 6 does NOT add new avoidance mathematics. UPDAPFPlanner.compute_control
+composes the Phase 2--5 public APIs with these accounting operations:
+
+| Quantity | Definition / owner |
+|---|---|
+| Common times | One prediction_time_grid(horizon, dt), including 0 and exact horizon |
+| UAV distributions | predict_uav_distribution, with config.uav.use_uncertainty |
+| Obstacle distributions | Pure PlannerObstacle.predictor.predict_distribution(tau) |
+| Current obstacle velocity | Zero-time distribution velocity_mean |
+| Collision radius | collision_radius using each binding metadata radius |
+| Safety samples | relative_covariance then evaluate_safety_sample on common grid |
+| CPA and CPA margin | compute_cpa; exact-time queries; compute_cpa_margin |
+| Chance-boundary TTC | compute_chance_constraint_ttc(safety_samples) |
+| Frozen risk | One build_collision_risk call; unchanged total_risk passed to Phase 5 |
+| Obstacle diagnostics | Phase-5 potential, raw force and individually saturated force |
+| Repulsive sum | Sum individually saturated forces; no extra sign/risk multiplier |
+| Raw total force | Attraction + repulsive sum + damping |
+| Command | saturate_vector(raw_total, config.control.max_total_force) |
+| Risk summaries | aggregate_risk: maximum and arithmetic mean |
+| Minimum margin/TTC | Minimum across samples / obstacle TTCs; infinity when empty |
+
+PlannerObstacle(metadata, predictor) is frozen and defined in interfaces.py;
+import it and UPDAPFPlanner from upd_apf.planner. No intermediate total repulsive
+saturation is used. Ablation switches are not activated in this phase.
+
+ObstacleRiskResult adds repulsive_force_raw and repulsive_potential;
+UPDAPFResult adds total_force_raw and reference_velocity. New fields default to
+None only for legacy constructors; planner calls always populate them.
+Arrays are independently owned and read-only. No global potential is claimed.
+
+Risk is an index, not probability. Negative margin violates a conservative
+sufficient chance condition. CPA is nominal mean-distance CPA and probabilistic_ttc
+is sampled/interpolated chance-boundary TTC. Degenerate errors propagate.
+Perfectly symmetric head-on geometry has no manufactured lateral escape.
+Phase 6 performs no state or motion integration.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from math import isfinite
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -174,6 +175,8 @@ def load_config(path: str | Path) -> UPDAPFConfig:
 
 
 def validate_config(config: UPDAPFConfig) -> None:
+    if not isfinite(config.control.max_total_force) or config.control.max_total_force < 0:
+        raise ValueError("control.max_total_force must be finite and non-negative")
     positive = {
         "simulation.dt": config.simulation.dt,
         "simulation.max_time": config.simulation.max_time,

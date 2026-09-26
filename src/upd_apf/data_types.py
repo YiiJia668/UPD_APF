@@ -93,10 +93,19 @@ class ObstacleRiskResult:
     safety_samples: Sequence[SafetySample]
     collision_risk: CollisionRisk
     repulsive_force: FloatArray
+    repulsive_force_raw: FloatArray | None = None
+    repulsive_potential: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "safety_samples", tuple(self.safety_samples))
         object.__setattr__(self, "repulsive_force", _array(self.repulsive_force, (3,), "repulsive_force"))
+        if self.repulsive_force_raw is not None:
+            object.__setattr__(self, "repulsive_force_raw", _array(self.repulsive_force_raw, (3,), "repulsive_force_raw"))
+        if self.repulsive_potential is not None:
+            potential = np.asarray(self.repulsive_potential, dtype=float)
+            if potential.ndim != 0 or not np.isfinite(potential) or potential < 0:
+                raise ValueError("repulsive_potential must be a finite non-negative scalar")
+            object.__setattr__(self, "repulsive_potential", float(potential))
 
 
 @dataclass(frozen=True)
@@ -110,8 +119,14 @@ class UPDAPFResult:
     min_safety_margin: float
     min_ttc: float
     per_obstacle_results: Sequence[ObstacleRiskResult]
+    total_force_raw: FloatArray | None = None
+    reference_velocity: FloatArray | None = None
 
     def __post_init__(self) -> None:
         for name in ("attractive_force", "repulsive_force", "damping_force", "total_force"):
             object.__setattr__(self, name, _array(getattr(self, name), (3,), name))
         object.__setattr__(self, "per_obstacle_results", tuple(self.per_obstacle_results))
+
+        for name in ("total_force_raw", "reference_velocity"):
+            if getattr(self, name) is not None:
+                object.__setattr__(self, name, _array(getattr(self, name), (3,), name))
